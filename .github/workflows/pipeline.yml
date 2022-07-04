@@ -1,0 +1,100 @@
+name: Deployment pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize]
+    
+jobs:
+  simple_deployment_pipeline:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+      - name: npm install
+        run: npm install
+      - name: lint
+        run: npm run eslint
+      - name: build
+        run: npm run build
+      - name: test
+        run: npm test
+      - name: e2e tests
+        uses: cypress-io/github-action@v2
+        with:
+          command: npm run test:e2e
+          start: npm run start-prod
+          wait-on: http://localhost:5000
+      - name: deploy App to Heroku
+        if: ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ', '), '#skip') }}
+        uses: akhileshns/heroku-deploy@v3.12.12
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: 'pokedex-fso-cicd-practice-1110' #Must be unique in Heroku
+          heroku_email: 'yumohuakai@gmail.com'
+          healthcheck: 'https://pokedex-fso-cicd-practice-1110.herokuapp.com/health'
+          checkstring: 'Hei, ok'
+          rollbackonhealthcheckfailed: true
+      - name: Deployment Success notification to webhhook
+        if: ${{ success() }}
+        uses: rjstone/discord-webhook-notify@v1
+        with:
+          severity: info
+          text: A new version of Pokedex deployed
+          description: to https://pokedex-fso-cicd-practice-1110.herokuapp.com/ by yumo :)
+          webhookUrl: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Deployment Failure notification to webhhook
+        if: ${{ failure() }}
+        uses: rjstone/discord-webhook-notify@v1
+        with:
+          severity: error
+          text: Build failed
+          description: commit ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }} by yumo broke the build :(
+          webhookUrl: ${{ secrets.DISCORD_WEBHOOK }}
+
+  tag_release:
+    needs: [simple_deployment_pipeline]
+    runs-on: ubuntu-20.04
+    if: ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ', '), '#skip') }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Bump version and push tag
+        # the 'github-tag-action' is currently updated at 1.39.0
+        # here uses the hash code instead of version number: 1.39.0 for the third-party actions
+        uses: anothrNick/github-tag-action@3840ec22ac98e14d981375e3ae2d8d0392964521
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEFAULT_BUMP: patch
+
+
+
+# name: Testing stuff # prints out the info to prepare to use 'if' for the ex11.16
+
+# on:
+#   push:
+#     branches:
+#       - master
+
+# jobs:
+#   a_test_job:
+#     runs-on: ubuntu-20.04
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: gihub context
+#         env:
+#           GITHUB_CONTEXT: ${{ toJson(github) }}
+#         run: echo "$GITHUB_CONTEXT"
+#       - name: commits
+#         env:
+#           COMMITS: ${{ toJson(github.event.commits) }}
+#         run: echo "$COMMITS"
+#       - name: commit messages
+#         env:
+#           COMMIT_MESSAGES: ${{ toJson(github.event.commits.*.message) }}
+#         run: echo "$COMMIT_MESSAGES"

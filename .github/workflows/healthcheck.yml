@@ -1,0 +1,33 @@
+name: Periodic health check
+
+on:
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    # Due to I use Helsinki time zone (UTC +3), 
+    # so if I want to do the schedule testing at 11am/monday, I need to reduce 3 hours
+    - cron:  '0 8 * * 1'  # minute(0-59) hour(0-23) date(1-31) month(1-12) weekday(0-6, 0 is sunday)
+    
+jobs:
+  health_check:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Scheduled Health check
+        uses: jtalk/url-health-check-action@v2
+        with:
+          url: https://pokedex-fso-cicd-practice-1110.herokuapp.com/health
+          max-attempts: 3 # Optional, defaults to 1
+          retry-delay: 5s # Optional, only applicable to max-attempts > 1          
+      - name: Scheduled Health check Success notification to webhhook
+        if: ${{ success() }}
+        uses: rjstone/discord-webhook-notify@v1
+        with:
+          severity: info
+          description: The application 'pokedex-fso-cicd-practice-1110' passed scheduled health check
+          webhookUrl: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Scheduled Health check Failure notification to webhhook
+        if: ${{ failure() }}
+        uses: rjstone/discord-webhook-notify@v1
+        with:
+          severity: error
+          description: The application 'pokedex-fso-cicd-practice-1110' did not pass scheduled health check
+          webhookUrl: ${{ secrets.DISCORD_WEBHOOK }}
